@@ -20,18 +20,16 @@ See more at http://blog.squix.ch
 
 #include <simpleDSTadjust.h>
 
-// see text.h for available text resources. Also change WUNDERGRROUND_LANGUAGE below to fetch weather data in different language 
-#define LANG 'EN'
+// see text.h for available text resources. Also change WUNDERGRROUND_LANGUAGE below to fetch
+// weather data in different language 
+//#define LANG 'EN'
+#define LANG 'FR'
 #include "text.h"
 
 // Config mode SSID
-const String CONFIG_SSID = "ESPaperConfig";
+const String CONFIG_SSID = "-ESPaperConfig"; // prepended by `ESP.getChipId()`
 
-// Setup
-String WIFI_SSID = "";
-String WIFI_PASS = "";
-
-const int UPDATE_INTERVAL_SECS = 20 * 60; // Update every 10 minutes
+const int UPDATE_INTERVAL_SECS = 30 * 60; // Update every 30 minutes
 
 /*
  * BUSY---->gpio4 
@@ -66,7 +64,7 @@ const int UPDATE_INTERVAL_SECS = 20 * 60; // Update every 10 minutes
 #define USR_BTN 12 // D6
 
 
-   
+
 // Wunderground Settings
 // To check your settings first try them out in your browser:
 // http://api.wunderground.com/api/WUNDERGROUND_API_KEY/conditions/q/WUNDERGROUND_COUNTTRY/WUNDERGROUND_CITY.json
@@ -75,12 +73,15 @@ const int UPDATE_INTERVAL_SECS = 20 * 60; // Update every 10 minutes
 // If you want to have control over the exact weather station ("observation location") that WU uses you need to replace
 // the city with "pws:STATION_ID". So, for the Aquatic Park in San Francisco you'd use "pws:KCASANFR359".
 // Alternative query options are documented at https://www.wunderground.com/weather/api/d/docs?d=data/index&MR=1#standard_request_url_format
+// http://api.wunderground.com/api/4c98fd7d81499080/conditions/q/FR/Toulouse.json
 
+// Note these information can be changed in the CONFIG+RST procedure
 String DISPLAYED_CITY_NAME = "";
-String WUNDERGRROUND_API_KEY = "";
-String WUNDERGRROUND_LANGUAGE = "";
-String WUNDERGROUND_COUNTRY = "";
-String WUNDERGROUND_CITY = "";
+/* String WUNDERGRROUND_API_KEY = ""; */
+String WUNDERGRROUND_LANGUAGE = "FR";
+String WUNDERGROUND_COUNTRY = "FR";
+String WUNDERGROUND_CITY = "Paris";
+#include "settings.secrets.h"
 
 #define UTC_OFFSET + 1
 struct dstRule StartRule = {"CEST", Last, Sun, Mar, 2, 3600}; // Central European Summer Time = UTC/GMT +2 hours
@@ -101,10 +102,8 @@ bool IS_STYLE_12HR = false;
 #define NTP_SERVERS "0.ch.pool.ntp.org", "1.ch.pool.ntp.org", "2.ch.pool.ntp.org"
 // #define NTP_SERVERS "us.pool.ntp.org", "time.nist.gov", "pool.ntp.org"
 
-
-
+const char *piHolehost = "192.168.0.3";  // Pi-Hole IP Address
 
 /***************************
  * End Settings
  **************************/
-

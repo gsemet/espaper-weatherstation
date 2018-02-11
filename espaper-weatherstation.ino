@@ -24,6 +24,19 @@ See more at https://blog.squix.org
   copies of the Software, and to permit persons to whom the Software is
 */
 
+/*
+Flashing instruction
+Follow these steps:
+1) Attach the programmer to the USB cable, do not yet attach it to the ESPaper or the computer
+2) Now attach it to the computer. If it doesn't show up try different ports. On my 2017 MacBook Pro I had to use a powered USB Hub. 
+3) If that still doesn't help restart the computer and try again.
+4) If you still don't see the programmer go to your command line and execute "sudo dmesg" after connecting the programmer. In my case the system saw the programmer as consuming too much energy and turned it off
+
+Does not work on My HighSierra (known security issue). Need to use a windows pc
+
+*/
+
+
 
 /*****************************
    Important: see settings.h to configure your settings!!!
@@ -47,6 +60,8 @@ See more at https://blog.squix.org
  ***/
 
 #include <JsonListener.h>
+#include <ArduinoJson.h>
+#include <ESP8266HTTPClient.h>
 #include <WundergroundConditions.h>
 //#include <WundergroundForecast.h>
 #include <WundergroundAstronomy.h>
@@ -54,14 +69,10 @@ See more at https://blog.squix.org
 #include <MiniGrafx.h>
 #include <EPD_WaveShare.h>
 
-
-
 #include "ArialRounded.h"
 #include <MiniGrafxFonts.h>
 #include "moonphases.h"
 #include "weathericons.h"
-#include "configportal.h"
-
 
 
 #define MINI_BLACK 0
@@ -79,6 +90,9 @@ uint16_t palette[] = {ILI9341_BLACK, // 0
 #define SCREEN_WIDTH 296
 #define BITS_PER_PIXEL 1
 
+#include "draw.h"
+#include "configportal.h"
+#include "pihole.h"
 
 EPD_WaveShare epd(EPD2_9, CS, RST, DC, BUSY);
 MiniGrafx gfx = MiniGrafx(&epd, BITS_PER_PIXEL, palette);
@@ -90,10 +104,11 @@ WGHourly hourlies[24];
 // Setup simpleDSTadjust Library rules
 simpleDSTadjust dstAdjusted(StartRule, EndRule);
 
+void drawMainPanel();
+
 void updateData();
 void drawProgress(uint8_t percentage, String text);
 void drawTime();
-void drawButtons();
 void drawCurrentWeather();
 void drawForecast();
 void drawForecastDetail(uint16_t x, uint16_t y, uint8_t dayIndex);
@@ -101,11 +116,11 @@ void drawAstronomy();
 void drawCurrentWeatherDetail();
 void drawLabelValue(uint8_t line, String label, String value);
 void drawBattery();
+void drawPiHole();
+void drawWifiQuality();
 String getMeteoconIcon(String iconText);
 const char* getMeteoconIconFromProgmem(String iconText);
 const char* getMiniMeteoconIconFromProgmem(String iconText);
-void drawForecast();
-
 
 long lastDownloadUpdate = millis();
 
@@ -117,12 +132,11 @@ bool canBtnPress;
 boolean connectWifi() {
   if (WiFi.status() == WL_CONNECTED) return true;
   //Manual Wifi
-  Serial.print("[");
+  Serial.print("Wifi SSID: ");
   Serial.print(WIFI_SSID.c_str());
-  Serial.print("]");
-  Serial.print("[");
+  Serial.print("\nWifi passw: ");
   Serial.print(WIFI_PASS.c_str());
-  Serial.print("]");
+  Serial.print("\n");
   WiFi.begin(WIFI_SSID.c_str(), WIFI_PASS.c_str());
   int i = 0;
   while (WiFi.status() != WL_CONNECTED) {
@@ -163,13 +177,7 @@ void setup() {
     if (connected) {
       updateData();
       gfx.fillBuffer(MINI_WHITE);
-
-      drawTime();
-      drawBattery();
-      drawCurrentWeather();
-      drawForecast();
-      drawAstronomy();
-      drawButtons();
+      drawMainPanel();
       gfx.commit();
     } else {
       gfx.fillBuffer(MINI_WHITE);
@@ -183,9 +191,19 @@ void setup() {
   }
 }
 
+void drawMainPanel(){
+  drawTime();
+  drawWifiQuality();
+  drawBattery();
+  drawCurrentWeather();
+  drawForecast();
+  drawAstronomy();
+  drawButtons(&gfx);
+  drawPiHole();
+}
 
-void loop() {
-
+void loop()
+{
 
 }
 
@@ -193,20 +211,26 @@ void loop() {
 void updateData() {
   configTime(UTC_OFFSET * 3600, 0, NTP_SERVERS);
 
-  //gfx.fillBuffer(MINI_WHITE);
-  gfx.setColor(MINI_BLACK);
-  gfx.fillRect(0, SCREEN_HEIGHT - 12, SCREEN_WIDTH, 12);
+  gfx.fillBuffer(MINI_WHITE);
   gfx.setColor(MINI_WHITE);
+  gfx.fillRect(0, SCREEN_HEIGHT - 12, SCREEN_WIDTH, 12);
+  
+  gfx.setColor(MINI_BLACK);
   gfx.setFont(ArialMT_Plain_10);
   gfx.setTextAlignment(TEXT_ALIGN_CENTER);
-  gfx.drawString(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 12, "Refreshing data...");
+  gfx.drawString(180, 60, FPSTR(TEXT_QUERYING_PIHOLE_L1));
+  gfx.drawString(180, 72, FPSTR(TEXT_QUERYING_PIHOLE_L2));
+  gfx.drawXbm(20, 20, piHoleLogo_width, piHoleLogo_height, piHoleLogo_bits);
+
+  gfx.drawString(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 12, String(FPSTR(TEXT_REFRESHING)));
   gfx.commit();
 
   //gfx.fillBuffer(MINI_BLACK);
   gfx.setFont(ArialRoundedMTBold_14);
 
-
-
+  Serial.println("\nWUnderground HTTP:" + String(WUNDERGRROUND_LANGUAGE) + String(" ") + 
+                 String(WUNDERGROUND_COUNTRY) + String(" ") + String(WUNDERGROUND_CITY) + 
+                 String(WUNDERGRROUND_API_KEY));
   WundergroundConditions *conditionsClient = new WundergroundConditions(IS_METRIC);
   conditionsClient->updateConditions(&conditions, WUNDERGRROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
   delete conditionsClient;
@@ -235,16 +259,15 @@ void updateData() {
     Serial.println(".");
     delay(100);
   }
-
 }
 
 // draws the clock
 void drawTime() {
-
   char *dstAbbrev;
   char time_str[30];
+  char update_str[30];
   time_t now = dstAdjusted.time(&dstAbbrev);
-  struct tm * timeinfo = localtime (&now);
+  struct tm * timeinfo = localtime(&now);
 
   gfx.setTextAlignment(TEXT_ALIGN_LEFT);
   gfx.setFont(ArialMT_Plain_10);
@@ -255,13 +278,12 @@ void drawTime() {
   if (IS_STYLE_12HR) {
     int hour = (timeinfo->tm_hour + 11) % 12 + 1; // take care of noon and midnight
     sprintf(time_str, "%2d:%02d:%02d", hour, timeinfo->tm_min, timeinfo->tm_sec);
-    gfx.drawString(2, -2, String(FPSTR(TEXT_UPDATED)) + String(time_str));
   } else {
     sprintf(time_str, "%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-    gfx.drawString(2, -2, String(FPSTR(TEXT_UPDATED)) + String(time_str));
   }
+  sprintf(update_str, TEXT_UPDATED, UPDATE_INTERVAL_SECS / 60);
+  gfx.drawString(2, -2, String(time_str) + String(update_str));
   gfx.drawLine(0, 11, SCREEN_WIDTH, 11);
-
 }
 
 // draws current weather information
@@ -278,7 +300,14 @@ void drawCurrentWeather() {
   gfx.setColor(MINI_BLACK);
   gfx.setFont(ArialMT_Plain_10);
   gfx.setTextAlignment(TEXT_ALIGN_LEFT);
-  gfx.drawString(55, 15, DISPLAYED_CITY_NAME);
+
+  Serial.println("\DISPLAYED_CITY_NAME = " + String(DISPLAYED_CITY_NAME));
+  Serial.println("\nWUNDERGROUND_CITY = " + String(WUNDERGROUND_CITY));
+  if (DISPLAYED_CITY_NAME.length()) {
+      gfx.drawString(55, 15, DISPLAYED_CITY_NAME);
+  } else {
+    gfx.drawString(55, 15, WUNDERGROUND_CITY);
+  }
 
   gfx.setFont(ArialMT_Plain_24);
   gfx.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -295,15 +324,26 @@ void drawCurrentWeather() {
   gfx.setTextAlignment(TEXT_ALIGN_LEFT);
   gfx.drawString(55, 50, conditions.weatherText);
   gfx.drawLine(0, 65, SCREEN_WIDTH, 65);
+}
 
+unsigned int hourAddWrap(unsigned int hour, unsigned int add) {
+  hour += add;
+  if(hour > 23) hour -= 24;
 
+  return hour;
 }
 
 void drawForecast() {
-  drawForecastDetail(SCREEN_WIDTH / 2 - 20, 15, 3);
-  drawForecastDetail(SCREEN_WIDTH / 2 + 22, 15, 6);
-  drawForecastDetail(SCREEN_WIDTH / 2 + 64, 15, 9);
-  drawForecastDetail(SCREEN_WIDTH / 2 + 106, 15, 12);
+  time_t now = dstAdjusted.time(nullptr);
+  struct tm *timeinfo = localtime(&now);
+
+  unsigned int curHour = timeinfo->tm_hour;
+  if (timeinfo->tm_min > 29) curHour = hourAddWrap(curHour, 1);
+
+  drawForecastDetail(SCREEN_WIDTH / 2 - 20, 15, hourAddWrap(curHour, 3));
+  drawForecastDetail(SCREEN_WIDTH / 2 + 22, 15, hourAddWrap(curHour, 6));
+  drawForecastDetail(SCREEN_WIDTH / 2 + 64, 15, hourAddWrap(curHour, 9));
+  drawForecastDetail(SCREEN_WIDTH / 2 + 106, 15, hourAddWrap(curHour, 12));
 }
 
 // helper for the forecast columns
@@ -397,8 +437,11 @@ void drawBattery() {
   gfx.setTextAlignment(TEXT_ALIGN_RIGHT);
   gfx.drawString(SCREEN_WIDTH - 22, -1, String(batteryVoltage, 2) + "V " + String(percentage) + "%");
   gfx.drawRect(SCREEN_WIDTH - 22, 0, 19, 10);
+  // The tiny bit at the end of the battery:
   gfx.fillRect(SCREEN_WIDTH - 2, 2, 2, 6);
+  // The percent:
   gfx.fillRect(SCREEN_WIDTH - 20, 2, 16 * percentage / 100, 6);
+  //gfx.drawRect(SCREEN_WIDTH - 1, 3, 1, 5);
 }
 
 // converts the dBm to a range between 0 and 100%
@@ -415,31 +458,17 @@ int8_t getWifiQuality() {
 
 void drawWifiQuality() {
   int8_t quality = getWifiQuality();
-  gfx.setColor(MINI_WHITE);
-  gfx.setTextAlignment(TEXT_ALIGN_RIGHT);
-  gfx.drawString(228, 9, String(quality) + "%");
+  gfx.setColor(MINI_BLACK);
+  gfx.setTextAlignment(TEXT_ALIGN_LEFT);
   for (int8_t i = 0; i < 4; i++) {
     for (int8_t j = 0; j < 2 * (i + 1); j++) {
       if (quality > i * 25 || j == 0) {
-        gfx.setPixel(230 + 2 * i, 18 - j);
+        gfx.setPixel(SCREEN_WIDTH / 2 + 35 + 2 * i, 8 - j);
       }
     }
   }
-}
-
-
-void drawButtons() {
-  gfx.setColor(MINI_BLACK);
-
-  uint16_t third = SCREEN_WIDTH / 3;
-  gfx.setColor(MINI_BLACK);
-  //gfx.fillRect(0, SCREEN_HEIGHT - 12, SCREEN_WIDTH, 12);
-  gfx.drawLine(0, SCREEN_HEIGHT - 12, SCREEN_WIDTH, SCREEN_HEIGHT - 12);
-  gfx.drawLine(2 * third, SCREEN_HEIGHT - 12, 2 * third, SCREEN_HEIGHT);
-  gfx.setTextAlignment(TEXT_ALIGN_CENTER);
-  gfx.setFont(ArialMT_Plain_10);
-  gfx.drawString(0.5 * third, SCREEN_HEIGHT - 12, FPSTR(TEXT_CONFIG_BUTTON));
-  gfx.drawString(2.5 * third, SCREEN_HEIGHT - 12, FPSTR(TEXT_REFRESH_BUTTON));
+  Serial.println("WiFi: " + String(quality) + "%");
+  gfx.drawString(SCREEN_WIDTH / 2 + 45, -1, String(quality) + "%");
 }
 
 String getMeteoconIcon(String iconText) {
@@ -486,4 +515,43 @@ String getMeteoconIcon(String iconText) {
   return ")";
 }
 
-
+void drawPiHole()
+{
+  if ((WiFi.status() == WL_CONNECTED))
+  {
+    HTTPClient http;
+    http.begin("http://" + String(piHolehost) + "/admin/api.php?summary");
+    int httpCode = http.GET();
+    if (httpCode > 0)
+    {
+      if (httpCode == HTTP_CODE_OK)
+      {
+        String piHoleString1 = http.getString();
+        const size_t bufferSize = JSON_OBJECT_SIZE(9) + 230;
+        DynamicJsonBuffer jsonBuffer(bufferSize);
+        JsonObject &root = jsonBuffer.parseObject(piHoleString1);
+        JsonObject &response = root["response"];
+        JsonObject &response_data0 = response["data"][0];
+        const char *domains_being_blocked = root["domains_being_blocked"];
+        const char *dns_queries_today = root["dns_queries_today"];
+        const char *ads_blocked_today = root["ads_blocked_today"];
+        const char *ads_percentage_today = root["ads_percentage_today"];
+        const char *unique_domains = root["unique_domains"];
+        const char *queries_forwarded = root["queries_forwarded"];
+        const char *queries_cached = root["queries_cached"];
+        const char *clients_ever_seen = root["clients_ever_seen"];
+        const char *unique_clients = root["unique_clients"];
+        gfx.setFont(ArialMT_Plain_10);
+        gfx.setTextAlignment(TEXT_ALIGN_LEFT);
+        gfx.drawString(200, 72, FPSTR(TEXT_BLOCKED_ADS));
+        gfx.drawString(200, 84, FPSTR(ads_blocked_today));
+        /* gfx.drawString(15, 84, "Domains Blocked: " + String(domains_being_blocked)); */
+        /* gfx.drawString(15, 96, "Percentage of Ads: " + String(ads_percentage_today) + "%"); */
+        http.end();
+      }
+    }
+    else
+    {
+    }
+  }
+}

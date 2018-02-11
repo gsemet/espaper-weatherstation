@@ -1,0 +1,7 @@
+{
+    "board": "esp8266:esp8266:generic",
+    "configuration": "CpuFrequency=80,ResetMethod=ck,CrystalFreq=26,FlashFreq=40,FlashMode=qio,FlashSize=512K0,LwIPVariant=v2mss536,Debug=Disabled,DebugLevel=None____,UploadSpeed=115200",
+    "port": "COM3",
+    "sketch": "espaper-weatherstation.ino",
+    "output": "../build"
+}

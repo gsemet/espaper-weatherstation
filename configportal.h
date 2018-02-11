@@ -29,6 +29,7 @@ const char HTTP_PORTAL_OPTIONS[] PROGMEM  = "<form action=\"/wifi\" method=\"get
 const char HTTP_ITEM[] PROGMEM            = "<div><a href='#p' onclick='c(this)'>{v}</a>&nbsp;<span class='q {i}'>{r}%</span></div>";
 const char HTTP_FORM_START[] PROGMEM      = "<form method='post' action='save'><br/>";
 const char HTTP_FORM_PARAM[] PROGMEM      = "<label for='{i}'>{p}</label><br/><input id='{i}' name='{n}' maxlength={l}  value='{v}' {c}><br/><br/>";
+const char HTTP_UPDATE_LINK[] PROGMEM     = "<br/><div class=\"c\"><a href=\"/update\">Firmware upgrade</a></div>";
 const char HTTP_FORM_END[] PROGMEM        = "<br/><button type='submit'>save</button></form><br/><form action=\"/reset\" method=\"get\"><button>Restart ESP</button></form>";
 const char HTTP_SCAN_LINK[] PROGMEM       = "<br/><div class=\"c\"><a href=\"/wifi\">Scan</a></div>";
 const char HTTP_SAVED[] PROGMEM           = "<div>Credentials Saved<br />Trying to connect ESP to network.<br />If it fails reconnect to AP to try again</div>";
@@ -229,8 +230,12 @@ void handleRoot() {
   page += "</select>";
   page += FPSTR(HTTP_WG_LANGUAGES);
   page += "<br/><br/>";
-  page += getFormField("wundergroundkey", "Wunderground API Key", "40", WUNDERGRROUND_API_KEY, "");
+  //page += getFormField("wundergroundkey", "Wunderground API Key", "40", WUNDERGRROUND_API_KEY, "");
+  page += getFormField("wundergroundkey", "Wunderground API Key", "40", 
+                       WUNDERGRROUND_API_KEY.substring(0, 3) + "***" + 
+                       WUNDERGRROUND_API_KEY.substring(WUNDERGRROUND_API_KEY.length() - 3), "");
   page += FPSTR(HTTP_FORM_END);
+  page += FPSTR(HTTP_UPDATE_LINK);
   page += FPSTR(HTTP_END);
 
   server.sendHeader("Content-Length", String(page.length()));
@@ -244,6 +249,9 @@ void handleSave() {
   WUNDERGROUND_COUNTRY = server.arg("wundergroundstate");
   WUNDERGRROUND_LANGUAGE = server.arg("wundergroundlanguage");
   WUNDERGRROUND_API_KEY = server.arg("wundergroundkey");
+  String apiKey = server.arg("wundergroundkey");
+  if (apiKey.length() > 10) 
+    WUNDERGRROUND_API_KEY = server.arg("wundergroundkey");
   Serial.println(WIFI_SSID);
   Serial.println(WIFI_PASS);
   Serial.println(WUNDERGROUND_CITY);
@@ -273,7 +281,8 @@ void handleNotFound() {
   //digitalWrite ( led, 0 );
 }
 
-
+#include<ESP8266HTTPUpdateServer.h> 
+ESP8266HTTPUpdateServer httpUpdater;
 
 void startConfigPortal(MiniGrafx *gfx) {
 
@@ -284,6 +293,7 @@ void startConfigPortal(MiniGrafx *gfx) {
      ESP.restart();
   } );
   server.onNotFound ( handleNotFound );
+  httpUpdater.setup(&server);
   server.begin();
 
   boolean connected = WiFi.status() == WL_CONNECTED;
@@ -294,33 +304,35 @@ void startConfigPortal(MiniGrafx *gfx) {
   gfx->setFont(ArialMT_Plain_16);
   
   if (connected) {
-      Serial.println ( "Open browser at http://" + WiFi.localIP() );
-
-      gfx->drawString(296 / 2, 10, "ESPaper Setup Mode\nConnected to: " + WiFi.SSID() + "\nOpen browser at\nhttp://" + WiFi.localIP().toString());
-      
+      Serial.println("Open browser at http://" + WiFi.localIP().toString());
+      gfx->drawString(296 / 2, 10, "ESPaper Setup Mode\nConnected to: " + WiFi.SSID() + 
+                      "\nOpen browser at\nhttp://" + WiFi.localIP().toString());
   } else {
       WiFi.mode(WIFI_AP);
-      WiFi.softAP(CONFIG_SSID.c_str());
+      WiFi.softAP((ESP.getChipId() + CONFIG_SSID).c_str());
       IPAddress myIP = WiFi.softAPIP();  
       Serial.println(myIP);
       
-
-      gfx->drawString(296 / 2, 10, "ESPaper Setup Mode\nConnect WiFi to:\n" + CONFIG_SSID + "\nOpen browser at\nhttp://" + myIP.toString());
-
+      gfx->drawString(296 / 2, 10, "ESPaper Setup Mode\nConnect WiFi to:\n" + CONFIG_SSID + 
+                      "\nOpen browser at\nhttp://" + myIP.toString());
   }
 
   gfx->commit();
 
-
-
   Serial.println ( "HTTP server started" );
 
-  while(true) {
-    server.handleClient();
-    yield();
+  long startTime = millis();
+  while (millis() - startTime < 300 * 1000)
+  {
+      server.handleClient();
+      yield();
   }
+
+  gfx->fillBuffer(1);
+  drawButtons(gfx);
+  drawDivLines(gfx);
+  gfx->setFont(ArialMT_Plain_16);
+  gfx->drawString(296 / 2, 128 / 2 - 30, "\nPress LEFT + RIGHT button\nRelease RIGHT button first\nto enter config mode");
+  gfx->commit();
+  ESP.deepSleep(UPDATE_INTERVAL_SECS * 1000000);
 }
-
-
-
-
