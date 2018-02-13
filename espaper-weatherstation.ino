@@ -37,7 +37,6 @@ Does not work on My HighSierra (known security issue). Need to use a windows pc
 */
 
 
-
 /*****************************
    Important: see settings.h to configure your settings!!!
  * ***************************/
@@ -47,8 +46,6 @@ Does not work on My HighSierra (known security issue). Need to use a windows pc
 #include <SPI.h>
 #include <ESP8266WiFi.h>
 #include "WeatherStationFonts.h"
-
-
 
 
 /***
@@ -108,7 +105,7 @@ void drawMainPanel();
 
 void updateData();
 void drawProgress(uint8_t percentage, String text);
-void drawTime();
+void drawTime(bool show_update_tag);
 void drawCurrentWeather();
 void drawForecast();
 void drawForecastDetail(uint16_t x, uint16_t y, uint8_t dayIndex);
@@ -192,7 +189,7 @@ void setup() {
 }
 
 void drawMainPanel(){
-  drawTime();
+  drawTime(true);
   drawWifiQuality();
   drawBattery();
   drawCurrentWeather();
@@ -210,7 +207,7 @@ void loop()
 // Update the internet based information and update screen
 void updateData() {
   configTime(UTC_OFFSET * 3600, 0, NTP_SERVERS);
-
+ 
   gfx.fillBuffer(MINI_WHITE);
   gfx.setColor(MINI_WHITE);
   gfx.fillRect(0, SCREEN_HEIGHT - 12, SCREEN_WIDTH, 12);
@@ -223,7 +220,17 @@ void updateData() {
   gfx.drawXbm(20, 20, piHoleLogo_width, piHoleLogo_height, piHoleLogo_bits);
 
   gfx.drawString(SCREEN_WIDTH / 2, SCREEN_HEIGHT - 12, String(FPSTR(TEXT_REFRESHING)));
+  drawTime(false);
   gfx.commit();
+
+  /* gfx.setColor(MINI_WHITE);
+  gfx.fillRect(0, SCREEN_HEIGHT - 12, SCREEN_WIDTH, 12);
+  gfx.commit();
+  gfx.setColor(MINI_BLACK);
+  gfx.setFont(ArialMT_Plain_10);
+  gfx.setTextAlignment(TEXT_ALIGN_CENTER);
+  gfx.drawString(180, 60, FPSTR(TEXT_REFRESHING));
+  gfx.commit(); */
 
   //gfx.fillBuffer(MINI_BLACK);
   gfx.setFont(ArialRoundedMTBold_14);
@@ -262,7 +269,7 @@ void updateData() {
 }
 
 // draws the clock
-void drawTime() {
+void drawTime(bool show_update_tag) {
   char *dstAbbrev;
   char time_str[30];
   char update_str[30];
@@ -282,7 +289,11 @@ void drawTime() {
     sprintf(time_str, "%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
   }
   sprintf(update_str, TEXT_UPDATED, UPDATE_INTERVAL_SECS / 60);
-  gfx.drawString(2, -2, String(time_str) + String(update_str));
+  if (show_update_tag){
+    gfx.drawString(2, -2, String(time_str) + String(update_str));
+  } else {
+    gfx.drawString(2, -2, String(time_str));
+  }  
   gfx.drawLine(0, 11, SCREEN_WIDTH, 11);
 }
 
