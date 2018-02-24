@@ -19,6 +19,7 @@ See more at http://blog.squix.ch
 */
 
 #include <ESP8266WebServer.h>
+#include <DNSServer.h>
 #include <MiniGrafx.h>
 
 const char HTTP_HEAD[] PROGMEM            = "<!DOCTYPE html><html lang=\"en\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/><title>{v}</title>";
@@ -309,11 +310,12 @@ void startConfigPortal(MiniGrafx *gfx) {
                       "\nOpen browser at\nhttp://" + WiFi.localIP().toString());
   } else {
       WiFi.mode(WIFI_AP);
-      WiFi.softAP((ESP.getChipId() + CONFIG_SSID).c_str());
+      String ap_name(ESP.getChipId() + CONFIG_SSID);
+      WiFi.softAP(ap_name.c_str());
       IPAddress myIP = WiFi.softAPIP();  
       Serial.println(myIP);
-      
-      gfx->drawString(296 / 2, 10, "ESPaper Setup Mode\nConnect WiFi to:\n" + CONFIG_SSID + 
+
+      gfx->drawString(296 / 2, 10, "ESPaper Setup Mode\nConnect WiFi to:\n" + ap_name +
                       "\nOpen browser at\nhttp://" + myIP.toString());
   }
 
